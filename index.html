@@ -410,22 +410,34 @@
 
 <style>
   /* Modal styles (scoped, won't override existing classes) */
-  #rsvp-modal-overlay{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:28px;z-index:20000;opacity:0;pointer-events:none;transition:opacity .28s ease}
+  #rsvp-modal-overlay{position:fixed;
+    inset:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:28px;
+    border-radius:20px;
+    z-index:20000;
+    opacity:0;pointer-events:none;transition:opacity .28s ease}
   #rsvp-modal-overlay[aria-hidden="false"]{opacity:1;pointer-events:auto}
   #rsvp-modal-overlay::backdrop{background:transparent}
   #rsvp-modal-overlay::before{content:"";position:fixed;inset:0;background:rgba(0,0,0,0.45);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);}
-  #rsvp-modal{position:relative;min-width:280px;max-width:520px;width:100%;background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));border-radius:16px;padding:20px 18px;box-shadow:0 20px 40px rgba(0,0,0,0.6);transform:translateY(6px) scale(.98);opacity:0;transition:transform .28s cubic-bezier(.2,.9,.2,1),opacity .28s ease;z-index:20001;border:1px solid rgba(255,255,255,0.06);font-family: 'SF Pro Rounded', 'SF Pro', Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;color:var(--white)}
+  #rsvp-modal{position:relative;min-width:280px;max-width:520px;width:100%;background:#161616;border-radius:16px;padding:20px 18px;box-shadow:0 20px 40px rgba(0,0,0,0.6);transform:translateY(6px) scale(.98);opacity:0;transition:transform .28s cubic-bezier(.2,.9,.2,1),opacity .28s ease;z-index:20001;border:1px solid rgba(255,255,255,0.06);font-family: 'SF Pro Rounded', 'SF Pro', Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;color:var(--white)}
   #rsvp-modal-overlay[aria-hidden="false"] #rsvp-modal{transform:translateY(0) scale(1);opacity:1}
   #rsvp-modal h2{margin:0 0 12px 0;font-size:18px;letter-spacing:0.4px}
-  #rsvp-name{width:100%;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.06);background:rgba(255,255,255,0.02);color:var(--white);font-size:15px;box-sizing:border-box;outline:none}
-  #rsvp-name:focus{box-shadow:0 6px 18px rgba(0,0,0,0.6);border-color:rgba(255,255,255,0.12)}
+  #rsvp-name{width:100%;padding:12px 14px;border-radius:10px;border:1px solid rgba(255,255,255,0.08);background:#242424fa;color:var(--white);font-size:15px;box-sizing:border-box;outline:none}
+  #rsvp-name:focus{box-shadow:0 6px 18px rgba(0,0,0,0.6);border-color:rgba(255,255,255,0.2)}
   #rsvp-error{height:18px;margin:8px 0 0;color:#ffb3b3;font-size:13px;opacity:0;transition:opacity .18s ease}
   #rsvp-error.show{opacity:1}
   .rsvp-modal__btns{display:flex;gap:10px;justify-content:flex-end;margin-top:16px}
   #rsvp-cancel,#rsvp-confirm{padding:10px 14px;border-radius:10px;border:0;font-weight:700;cursor:pointer}
   #rsvp-cancel{background:transparent;color:var(--white);border:1px solid rgba(255,255,255,0.06)}
-  #rsvp-confirm{background:#0a84ff;color:white}
+  #rsvp-confirm{background:#0a84ff;color:white;display:inline-block;min-width:64px;box-sizing:border-box;transition:width .18s ease,transform .12s ease}
   .visually-hidden{position:absolute!important;height:1px;width:1px;overflow:hidden;clip:rect(1px,1px,1px,1px);white-space:nowrap}
+  /* Darken RSVP option when already sent (solid color) */
+  .rsvp-option.rsvp-sent{background:#02020224;color:rgba(255,255,255,0.85);pointer-events:none;opacity:1; height: 45px;}
+  .rsvp-option.rsvp-sent .rsvp-icon{opacity:0.9}
+</style>
 </style>
 
 <script>
@@ -448,6 +460,7 @@
   const btnConfirm = document.getElementById('rsvp-confirm');
 
   let selectedStatus = '';
+  let selectedButton = null;
 
   function openModal(status){
     selectedStatus = status;
@@ -460,11 +473,25 @@
     errorEl.textContent = '';
     errorEl.classList.remove('show');
     overlay.setAttribute('aria-hidden','false');
-    setTimeout(()=>nameInput.focus(), 50);
+    // size Confirm button to match the originating pill minus 10px for padding
+    setTimeout(()=>{
+      nameInput.focus();
+      try{
+        if(selectedButton && btnConfirm){
+          const rect = selectedButton.getBoundingClientRect();
+          const w = Math.max(40, Math.round(rect.width - 10));
+          btnConfirm.style.width = w + 'px';
+        } else {
+          btnConfirm.style.width = '';
+        }
+      }catch(e){ btnConfirm.style.width = ''; }
+    }, 50);
   }
 
   function closeModal(){
     overlay.setAttribute('aria-hidden','true');
+    // reset confirm width
+    try{ btnConfirm.style.width = ''; }catch(e){}
   }
 
   btnCancel.addEventListener('click', closeModal);
@@ -483,7 +510,10 @@
       btn.removeAttribute('onclick');
       const status = btn.dataset.status;
       if(!status) return;
-      btn.addEventListener('click', ()=> openModal(status));
+      btn.addEventListener('click', ()=>{
+        selectedButton = btn;
+        openModal(status);
+      });
     });
   }
 
@@ -506,9 +536,33 @@
       body: payload
     });
 
+    // Persist and visually mark the originating button as sent
+    try{ localStorage.setItem('rsvpStatus', selectedStatus); }catch(e){}
+    markAsSent(selectedStatus, selectedButton);
+
     titleEl.textContent = 'Enviado. ¡Gracias!';
     setTimeout(closeModal, 1200);
   });
+
+  // Mark button visually and disable it
+  function markAsSent(status, btn){
+    const button = btn || document.querySelector('.rsvp-option[data-status="'+status+'"]');
+    if(!button) return;
+    button.classList.add('rsvp-sent');
+    try{ button.setAttribute('disabled',''); }catch(e){}
+    button.setAttribute('aria-pressed','true');
+  }
+
+  // Apply persisted selection on load
+  try{
+    const persisted = localStorage.getItem('rsvpStatus');
+    if(persisted){
+      // attach first then mark
+      attachToButtons();
+      setTimeout(()=> markAsSent(persisted), 50);
+      return;
+    }
+  }catch(e){}
 
   attachToButtons();
 })();
